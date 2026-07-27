@@ -31,6 +31,14 @@ RFI remains enabled and all H.264 behavior remains unchanged.
 - HEVC 1920x1080 60 FPS
 - Sunshine + Moonlight
 
+## Modification notice
+
+Modified on 2026-07-28.
+
+This fork modifies Moonlight Android to disable MediaCodec low-latency
+options for HEVC on Xiaomi TV Stick MiTV-AYFR0 to work around severe
+HEVC frame rendering issues on Android TV 14.
+
 ## Disclaimer
 
 Unofficial build. Not affiliated with the Moonlight project.
