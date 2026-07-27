@@ -677,8 +677,21 @@ public class MediaCodecHelper {
         return isDecoderInList(refFrameInvalidationAvcPrefixes, decoderName);
     }
 
-   public static boolean decoderSupportsRefFrameInvalidationHevc(MediaCodecInfo decoderInfo) {
-    return false;
+public static boolean decoderSupportsRefFrameInvalidationHevc(MediaCodecInfo decoderInfo) {
+    // HEVC decoders seem to universally support RFI, but it can have huge latency penalties
+    // for some decoders due to the number of references frames being > 1. Old Amlogic
+    // decoders are known to have this problem.
+    //
+    // If the decoder supports FEATURE_LowLatency or any vendor low latency option,
+    // we will use that as an indication that it can handle HEVC RFI without excessively
+    // buffering frames.
+    if (decoderSupportsAndroidRLowLatency(decoderInfo, "video/hevc") ||
+            decoderSupportsKnownVendorLowLatencyOption(decoderInfo.getName())) {
+        LimeLog.info("Enabling HEVC RFI based on low latency option support");
+        return true;
+    }
+
+    return isDecoderInList(refFrameInvalidationHevcPrefixes, decoderInfo.getName());
 }
 
     public static boolean decoderSupportsRefFrameInvalidationAv1(MediaCodecInfo decoderInfo) {
