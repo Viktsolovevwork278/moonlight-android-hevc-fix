@@ -1,35 +1,36 @@
-# Moonlight Android
+# Moonlight Android - Xiaomi TV Stick HEVC Fix
 
-[![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/232a8tadrrn8jv0k/branch/master?svg=true)](https://ci.appveyor.com/project/cgutman/moonlight-android/branch/master)
-[![Translation Status](https://hosted.weblate.org/widgets/moonlight/-/moonlight-android/svg-badge.svg)](https://hosted.weblate.org/projects/moonlight/moonlight-android/)
+A patched build of Moonlight Android that fixes extremely low FPS /
+slideshow-like HEVC streaming on Xiaomi TV Stick MiTV-AYFR0 running Android TV 14.
 
-[Moonlight for Android](https://moonlight-stream.org) is an open source client for NVIDIA GameStream and [Sunshine](https://github.com/LizardByte/Sunshine).
+## Symptoms
 
-Moonlight for Android will allow you to stream your full collection of games from your Windows PC to your Android device,
-whether in your own home or over the internet.
+- H.264 works normally
+- HEVC video files in VLC work normally
+- Moonlight HEVC stream runs at ~0-1 visible FPS
+- Moonlight statistics may incorrectly report normal rendering FPS
+- Decoder: c2.amlogic.hevc.decoder
 
-Moonlight also has a [PC client](https://github.com/moonlight-stream/moonlight-qt) and [iOS/tvOS client](https://github.com/moonlight-stream/moonlight-ios).
+## Cause
 
-You can follow development on our [Discord server](https://moonlight-stream.org/discord) and help translate Moonlight into your language on [Weblate](https://hosted.weblate.org/projects/moonlight/moonlight-android/).
+The issue is triggered by Android MediaCodec low-latency mode
+on the Amlogic HEVC decoder.
 
-## Downloads
-* [Google Play Store](https://play.google.com/store/apps/details?id=com.limelight)
-* [Amazon App Store](https://www.amazon.com/gp/product/B00JK4MFN2)
-* [F-Droid](https://f-droid.org/packages/com.limelight)
-* [APK](https://github.com/moonlight-stream/moonlight-android/releases)
+## Fix
 
-## Building
-* Install Android Studio and the Android NDK
-* Run ‘git submodule update --init --recursive’ from within moonlight-android/
-* In moonlight-android/, create a file called ‘local.properties’. Add an ‘ndk.dir=’ property to the local.properties file and set it equal to your NDK directory.
-* Build the APK using Android Studio or gradle
+Disable MediaCodec low-latency options for HEVC on MiTV-AYFR0.
 
-## Authors
+RFI remains enabled and all H.264 behavior remains unchanged.
 
-* [Cameron Gutman](https://github.com/cgutman)  
-* [Diego Waxemberg](https://github.com/dwaxemberg)  
-* [Aaron Neyer](https://github.com/Aaronneyer)  
-* [Andrew Hennessy](https://github.com/yetanothername)
+## Tested configuration
 
-Moonlight is the work of students at [Case Western](http://case.edu) and was
-started as a project at [MHacks](http://mhacks.org).
+- Xiaomi TV Stick
+- Model: MiTV-AYFR0
+- Android TV 14
+- Decoder: c2.amlogic.hevc.decoder
+- HEVC 1920x1080 60 FPS
+- Sunshine + Moonlight
+
+## Disclaimer
+
+Unofficial build. Not affiliated with the Moonlight project.
