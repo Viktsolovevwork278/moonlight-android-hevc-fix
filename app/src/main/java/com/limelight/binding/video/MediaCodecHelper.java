@@ -493,6 +493,9 @@ public class MediaCodecHelper {
     }
 
     public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, int tryNumber) {
+        if ("video/hevc".equals(videoFormat.getString(MediaFormat.KEY_MIME))) {
+    return false;
+}
         // Options here should be tried in the order of most to least risky. The decoder will use
         // the first MediaFormat that doesn't fail in configure().
 
