@@ -39,9 +39,9 @@ import android.view.SurfaceHolder;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
 
-    private static final boolean USE_FRAME_RENDER_TIME = false;
+    private static final boolean USE_FRAME_RENDER_TIME = true;
     private static final boolean FRAME_RENDER_TIME_ONLY = USE_FRAME_RENDER_TIME && false;
-
+    
     // Used on versions < 5.0
     private ByteBuffer[] legacyInputBuffers;
 
@@ -78,7 +78,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private String glRenderer;
     private boolean foreground = true;
     private PerfOverlayListener perfListener;
-
+    private long lastCodecRenderTimeNanos;
+    
     private static final int CR_MAX_TRIES = 10;
     private static final int CR_RECOVERY_TYPE_NONE = 0;
     private static final int CR_RECOVERY_TYPE_FLUSH = 1;
@@ -687,6 +688,18 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             videoDecoder.setOnFrameRenderedListener(new MediaCodec.OnFrameRenderedListener() {
                 @Override
                 public void onFrameRendered(MediaCodec mediaCodec, long presentationTimeUs, long renderTimeNanos) {
+                    if (lastCodecRenderTimeNanos != 0) {
+    long renderGapNanos = renderTimeNanos - lastCodecRenderTimeNanos;
+
+    if (renderGapNanos > 25_000_000L) {
+        LimeLog.warning(
+                "CODEC_RENDER_GAP_MS=" +
+                (renderGapNanos / 1_000_000.0)
+        );
+    }
+}
+
+lastCodecRenderTimeNanos = renderTimeNanos;
                     long delta = (renderTimeNanos / 1000000L) - (presentationTimeUs / 1000);
                     if (delta >= 0 && delta < 1000) {
                         if (USE_FRAME_RENDER_TIME) {
