@@ -493,8 +493,26 @@ public class MediaCodecHelper {
     }
 
     public static boolean setDecoderLowLatencyOptions(MediaFormat videoFormat, MediaCodecInfo decoderInfo, int tryNumber) {
-        if ("video/hevc".equals(videoFormat.getString(MediaFormat.KEY_MIME))) {
-    return false;
+           String mimeType = videoFormat.getString(MediaFormat.KEY_MIME);
+
+    boolean isMiTvAyfr0BrokenHevcLowLatency =
+            "video/hevc".equals(mimeType)
+                    && "MiTV-AYFR0".equalsIgnoreCase(Build.MODEL)
+                    && "c2.amlogic.hevc.decoder".equalsIgnoreCase(decoderInfo.getName());
+
+    if (isMiTvAyfr0BrokenHevcLowLatency) {
+        // MediaCodec low-latency options cause slideshow-like HEVC playback
+        // on MiTV-AYFR0, so skip them but preserve realtime codec priority.
+        if (tryNumber == 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            LimeLog.info("Using realtime HEVC decoder priority without low-latency options on MiTV-AYFR0");
+            videoFormat.setInteger(MediaFormat.KEY_PRIORITY, 0);
+            return true;
+        }
+
+        // If configuration with KEY_PRIORITY fails, retry without any
+        // additional decoder options. Do not enable HEVC low-latency mode.
+        return false;
+    }
 }
         // Options here should be tried in the order of most to least risky. The decoder will use
         // the first MediaFormat that doesn't fail in configure().
