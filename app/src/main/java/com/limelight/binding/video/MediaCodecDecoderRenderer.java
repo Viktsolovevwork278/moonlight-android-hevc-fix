@@ -1074,56 +1074,63 @@ lastCodecRenderTimeNanos = renderTimeNanos;
                             numFramesOut++;
 
                             // Render the latest frame now if frame pacing isn't in balanced mode
-// Render frames immediately if frame pacing isn't in balanced mode
-if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED) {
-    if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
-            prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
+                            if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED) {
+                                // Get the last output buffer in the queue
+                                while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
+                                    videoDecoder.releaseOutputBuffer(lastIndex, false);
 
-        // Do not drain and discard queued output buffers in smoothness modes.
-        // Render every decoded frame in order.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            videoDecoder.releaseOutputBuffer(lastIndex, 0);
-        }
-        else {
-            videoDecoder.releaseOutputBuffer(lastIndex, true);
-        }
-    }
-    else {
-        // Lowest-latency mode intentionally discards older decoded frames
-        // and renders only the newest available frame.
-        while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
-            videoDecoder.releaseOutputBuffer(lastIndex, false);
-            numFramesOut++;
+                                    numFramesOut++;
 
-            lastIndex = outIndex;
-            presentationTimeUs = info.presentationTimeUs;
-        }
+                                    lastIndex = outIndex;
+                                    presentationTimeUs = info.presentationTimeUs;
+                                }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            videoDecoder.releaseOutputBuffer(lastIndex, System.nanoTime());
-        }
-        else {
-            videoDecoder.releaseOutputBuffer(lastIndex, true);
-        }
-    }
+                                if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
+                                        prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
+                                    // In max smoothness or cap FPS mode, we want to never drop frames
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                        // Use a PTS that will cause this frame to never be dropped
+                                        videoDecoder.releaseOutputBuffer(lastIndex, 0);
+                                    }
+                                    else {
+                                        videoDecoder.releaseOutputBuffer(lastIndex, true);
+                                    }
+                                }
+                                else {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                        // Use a PTS that will cause this frame to be dropped if another comes in within
+                                        // the same V-sync period
+                                        videoDecoder.releaseOutputBuffer(lastIndex, System.nanoTime());
+                                    }
+                                    else {
+                                        videoDecoder.releaseOutputBuffer(lastIndex, true);
+                                    }
+                                }
 
-    activeWindowVideoStats.totalFramesRendered++;
-}
-else {
-    // For balanced frame pacing case, the Choreographer callback will handle rendering.
-    // We just put all frames into the output buffer queue and let it handle things.
-    // Discard the oldest buffer if we've exceeded our limit.
-    if (outputBufferQueue.size() == OUTPUT_BUFFER_QUEUE_LIMIT) {
-        try {
-            videoDecoder.releaseOutputBuffer(outputBufferQueue.take(), false);
-        }
-        catch (InterruptedException e) {
-            return;
-        }
-    }
+                                activeWindowVideoStats.totalFramesRendered++;
+                            }
+                            else {
+                                // For balanced frame pacing case, the Choreographer callback will handle rendering.
+                                // We just put all frames into the output buffer queue and let it handle things.
 
-    outputBufferQueue.add(lastIndex);
-}
+                                // Discard the oldest buffer if we've exceeded our limit.
+                                //
+                                // NB: We have to do this on the producer side because the consumer may not
+                                // run for a while (if there is a huge mismatch between stream FPS and display
+                                // refresh rate).
+                                if (outputBufferQueue.size() == OUTPUT_BUFFER_QUEUE_LIMIT) {
+                                    try {
+                                        videoDecoder.releaseOutputBuffer(outputBufferQueue.take(), false);
+                                    } catch (InterruptedException e) {
+                                        // We're shutting down, so we can just drop this buffer on the floor
+                                        // and it will be reclaimed when the codec is released.
+                                        return;
+                                    }
+                                }
+
+                                // Add this buffer
+                                outputBufferQueue.add(lastIndex);
+                            }
 
                             // Add delta time to the totals (excluding probable outliers)
                             long delta = SystemClock.uptimeMillis() - (presentationTimeUs / 1000);
