@@ -36,6 +36,7 @@ import android.os.SystemClock;
 import android.util.Range;
 import android.view.Choreographer;
 import android.view.SurfaceHolder;
+import android.view.Surface;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
 
@@ -538,7 +539,30 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
 
         LimeLog.info("Configuring with format: "+format);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+    try {
+        Surface surface = renderTarget.getSurface();
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            surface.setFrameRate(
+                    refreshRate,
+                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
+                    Surface.CHANGE_FRAME_RATE_ALWAYS
+            );
+        }
+        else {
+            surface.setFrameRate(
+                    refreshRate,
+                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
+            );
+        }
+
+        LimeLog.info("Requested video Surface frame rate: " + refreshRate);
+    }
+    catch (IllegalArgumentException | IllegalStateException e) {
+        LimeLog.warning("Failed to set Surface frame rate: " + e);
+    }
+}
         videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
 
         configuredFormat = format;
