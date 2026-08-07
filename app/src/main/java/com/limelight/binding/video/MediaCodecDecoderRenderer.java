@@ -81,6 +81,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private PerfOverlayListener perfListener;
     private long lastCodecRenderTimeNanos;
     private long lastPresentationTimeUs;
+    private long nextScheduledRenderTimeNanos;
     
     private static final int CR_MAX_TRIES = 10;
     private static final int CR_RECOVERY_TYPE_NONE = 0;
@@ -1114,17 +1115,30 @@ lastPresentationTimeUs = presentationTimeUs;
                                     presentationTimeUs = info.presentationTimeUs;
                                 }
 
-                                if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
-                                        prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
-                                    // In max smoothness or cap FPS mode, we want to never drop frames
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                                        // Use a PTS that will cause this frame to never be dropped
-                                        videoDecoder.releaseOutputBuffer(lastIndex, 0);
-                                    }
-                                    else {
-                                        videoDecoder.releaseOutputBuffer(lastIndex, true);
-                                    }
-                                }
+                             if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
+        prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        long now = System.nanoTime();
+        long frameIntervalNanos = 1_000_000_000L / refreshRate;
+
+        // Initialize or recover if scheduling has fallen behind.
+        if (nextScheduledRenderTimeNanos == 0 ||
+                nextScheduledRenderTimeNanos < now - frameIntervalNanos) {
+            nextScheduledRenderTimeNanos = now;
+        }
+
+        videoDecoder.releaseOutputBuffer(
+                lastIndex,
+                nextScheduledRenderTimeNanos
+        );
+
+        nextScheduledRenderTimeNanos += frameIntervalNanos;
+    }
+    else {
+        videoDecoder.releaseOutputBuffer(lastIndex, true);
+    }
+}
                                 else {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                                         // Use a PTS that will cause this frame to be dropped if another comes in within
