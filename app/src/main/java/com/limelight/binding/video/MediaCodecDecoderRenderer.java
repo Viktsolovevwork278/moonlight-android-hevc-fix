@@ -36,7 +36,6 @@ import android.os.SystemClock;
 import android.util.Range;
 import android.view.Choreographer;
 import android.view.SurfaceHolder;
-import android.view.Surface;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
 
@@ -80,8 +79,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private boolean foreground = true;
     private PerfOverlayListener perfListener;
     private long lastCodecRenderTimeNanos;
-    private long lastPresentationTimeUs;
-    private long nextScheduledRenderTimeNanos;
     
     private static final int CR_MAX_TRIES = 10;
     private static final int CR_RECOVERY_TYPE_NONE = 0;
@@ -540,30 +537,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
 
         LimeLog.info("Configuring with format: "+format);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-    try {
-        Surface surface = renderTarget.getSurface();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            surface.setFrameRate(
-                    refreshRate,
-                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE,
-                    Surface.CHANGE_FRAME_RATE_ALWAYS
-            );
-        }
-        else {
-            surface.setFrameRate(
-                    refreshRate,
-                    Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE
-            );
-        }
-
-        LimeLog.info("Requested video Surface frame rate: " + refreshRate);
-    }
-    catch (IllegalArgumentException | IllegalStateException e) {
-        LimeLog.warning("Failed to set Surface frame rate: " + e);
-    }
-}
         videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
 
         configuredFormat = format;
@@ -714,22 +688,18 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             videoDecoder.setOnFrameRenderedListener(new MediaCodec.OnFrameRenderedListener() {
                 @Override
                 public void onFrameRendered(MediaCodec mediaCodec, long presentationTimeUs, long renderTimeNanos) {
-if (lastCodecRenderTimeNanos != 0 && lastPresentationTimeUs != 0) {
+                    if (lastCodecRenderTimeNanos != 0) {
     long renderGapNanos = renderTimeNanos - lastCodecRenderTimeNanos;
-    long ptsGapUs = presentationTimeUs - lastPresentationTimeUs;
 
     if (renderGapNanos > 25_000_000L) {
         LimeLog.warning(
-                "FRAME_GAP render_ms=" +
-                (renderGapNanos / 1_000_000.0) +
-                " pts_ms=" +
-                (ptsGapUs / 1000.0)
+                "CODEC_RENDER_GAP_MS=" +
+                (renderGapNanos / 1_000_000.0)
         );
     }
 }
 
 lastCodecRenderTimeNanos = renderTimeNanos;
-lastPresentationTimeUs = presentationTimeUs;
                     long delta = (renderTimeNanos / 1000000L) - (presentationTimeUs / 1000);
                     if (delta >= 0 && delta < 1000) {
                         if (USE_FRAME_RENDER_TIME) {
@@ -1115,30 +1085,17 @@ lastPresentationTimeUs = presentationTimeUs;
                                     presentationTimeUs = info.presentationTimeUs;
                                 }
 
-                             if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
-        prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-        long now = System.nanoTime();
-        long frameIntervalNanos = 1_000_000_000L / refreshRate;
-
-        // Initialize or recover if scheduling has fallen behind.
-        if (nextScheduledRenderTimeNanos == 0 ||
-                nextScheduledRenderTimeNanos < now - frameIntervalNanos) {
-            nextScheduledRenderTimeNanos = now;
-        }
-
-        videoDecoder.releaseOutputBuffer(
-                lastIndex,
-                nextScheduledRenderTimeNanos
-        );
-
-        nextScheduledRenderTimeNanos += frameIntervalNanos;
-    }
-    else {
-        videoDecoder.releaseOutputBuffer(lastIndex, true);
-    }
-}
+                                if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
+                                        prefs.framePacing == PreferenceConfiguration.FRAME_PACING_CAP_FPS) {
+                                    // In max smoothness or cap FPS mode, we want to never drop frames
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                        // Use a PTS that will cause this frame to never be dropped
+                                        videoDecoder.releaseOutputBuffer(lastIndex, 0);
+                                    }
+                                    else {
+                                        videoDecoder.releaseOutputBuffer(lastIndex, true);
+                                    }
+                                }
                                 else {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                                         // Use a PTS that will cause this frame to be dropped if another comes in within
